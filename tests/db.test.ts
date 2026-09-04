@@ -74,4 +74,32 @@ test("PlaybookStore handles corrupt file and empty inputs gracefully", (t) => {
   const tip = store.findRecoveryTip("npm", "install_fail occurred");
   assert.equal(tip, "Run npm install --legacy-peer-deps");
   assert.equal(store.findRecoveryTip("read", "path_fix"), null);
+
+  // Inverted substring protection: generic error snippet "fail" or "install" should not match pattern "install_fail"
+  assert.equal(store.findRecoveryTip("npm", "fail"), null);
+  assert.equal(store.findRecoveryTip("npm", "install"), null);
+});
+
+test("PlaybookStore ignores patterns shorter than 3 chars", (t) => {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "pi-learner-db-short-"));
+  const dbFile = path.join(tmpDir, "playbooks.json");
+
+  t.after(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  const store = new PlaybookStore(dbFile);
+  store.saveRules([
+    {
+      id: "short-1",
+      tier: 3,
+      toolName: "bash",
+      pattern: "xy",
+      recommendation: "short pattern tip",
+      sessionCount: 3,
+      lastSeenTimestamp: Date.now(),
+    },
+  ]);
+
+  assert.equal(store.findRecoveryTip("bash", "some xy error"), null);
 });

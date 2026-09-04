@@ -33,6 +33,141 @@ test("extractRecoveryPairs pairs failed tool span with subsequent successful too
   assert.equal(pairs[0].toolName, "bash");
   assert.equal(pairs[0].failedInput.command, "npm test");
   assert.equal(pairs[0].successInput.command, "npm test -- --runInBand");
+  assert.equal(pairs[0].errorSignature, "command_fail:npm test");
+});
+
+test("extractRecoveryPairs differentiates subcommands instead of collapsing to base binary", () => {
+  const spans: ParsedSpan[] = [
+    {
+      traceId: "t1",
+      spanId: "s1",
+      name: "tool:bash",
+      attributes: {
+        "tool.name": "bash",
+        "tool.is_error": true,
+        "tool.input.json": JSON.stringify({ command: "npm test" }),
+      },
+    },
+    {
+      traceId: "t1",
+      spanId: "s2",
+      name: "tool:bash",
+      attributes: {
+        "tool.name": "bash",
+        "tool.is_error": false,
+        "tool.input.json": JSON.stringify({ command: "npm test --verbose" }),
+      },
+    },
+    {
+      traceId: "t1",
+      spanId: "s3",
+      name: "tool:bash",
+      attributes: {
+        "tool.name": "bash",
+        "tool.is_error": true,
+        "tool.input.json": JSON.stringify({ command: "npm install express" }),
+      },
+    },
+    {
+      traceId: "t1",
+      spanId: "s4",
+      name: "tool:bash",
+      attributes: {
+        "tool.name": "bash",
+        "tool.is_error": false,
+        "tool.input.json": JSON.stringify({ command: "npm install --legacy-peer-deps express" }),
+      },
+    },
+  ];
+
+  const pairs = extractRecoveryPairs(spans);
+  assert.equal(pairs.length, 2);
+  assert.equal(pairs[0].errorSignature, "command_fail:npm test");
+  assert.equal(pairs[1].errorSignature, "command_fail:npm install");
+});
+
+test("extractRecoveryPairs does not pair when commands do not share base binary", () => {
+  const spans: ParsedSpan[] = [
+    {
+      traceId: "t1",
+      spanId: "s1",
+      name: "tool:bash",
+      attributes: {
+        "tool.name": "bash",
+        "tool.is_error": true,
+        "tool.input.json": JSON.stringify({ command: "npm test" }),
+      },
+    },
+    {
+      traceId: "t1",
+      spanId: "s2",
+      name: "tool:bash",
+      attributes: {
+        "tool.name": "bash",
+        "tool.is_error": false,
+        "tool.input.json": JSON.stringify({ command: "git status" }),
+      },
+    },
+  ];
+
+  const pairs = extractRecoveryPairs(spans);
+  assert.equal(pairs.length, 0);
+});
+
+test("extractRecoveryPairs discards activeFailure if more than 3 intermediate tool spans pass", () => {
+  const createBashError = (): ParsedSpan => ({
+    traceId: "t1",
+    spanId: "s0",
+    name: "tool:bash",
+    attributes: { "tool.name": "bash", "tool.is_error": true, "tool.input.json": JSON.stringify({ command: "npm test" }) },
+  });
+  const createIntermediate = (id: string): ParsedSpan => ({
+    traceId: "t1",
+    spanId: id,
+    name: "tool:read",
+    attributes: { "tool.name": "read", "tool.is_error": false, "tool.input.json": JSON.stringify({ path: "file.ts" }) },
+  });
+  const createBashSuccess = (): ParsedSpan => ({
+    traceId: "t1",
+    spanId: "s_rec",
+    name: "tool:bash",
+    attributes: { "tool.name": "bash", "tool.is_error": false, "tool.input.json": JSON.stringify({ command: "npm test --runInBand" }) },
+  });
+
+  // 3 intermediate tool spans -> Still pairs
+  const spans3 = [createBashError(), createIntermediate("i1"), createIntermediate("i2"), createIntermediate("i3"), createBashSuccess()];
+  assert.equal(extractRecoveryPairs(spans3).length, 1);
+
+  // 4 intermediate tool spans -> Discarded (> 3)
+  const spans4 = [createBashError(), createIntermediate("i1"), createIntermediate("i2"), createIntermediate("i3"), createIntermediate("i4"), createBashSuccess()];
+  assert.equal(extractRecoveryPairs(spans4).length, 0);
+});
+
+test("extractRecoveryPairs resolves root sessionId upfront from trace spans", () => {
+  const spans: ParsedSpan[] = [
+    {
+      traceId: "t1",
+      spanId: "s_root",
+      name: "agent_run",
+      attributes: { "session.id": "session-xyz" },
+    },
+    {
+      traceId: "t1",
+      spanId: "s1",
+      name: "tool:bash",
+      attributes: { "tool.name": "bash", "tool.is_error": true, "tool.input.json": JSON.stringify({ command: "pytest" }) },
+    },
+    {
+      traceId: "t1",
+      spanId: "s2",
+      name: "tool:bash",
+      attributes: { "tool.name": "bash", "tool.is_error": false, "tool.input.json": JSON.stringify({ command: "pytest -m unit" }) },
+    },
+  ];
+
+  const pairs = extractRecoveryPairs(spans);
+  assert.equal(pairs.length, 1);
+  assert.equal(pairs[0].sessionId, "session-xyz");
 });
 
 test("classifyLearnedRules enforces Rule of Three threshold", () => {

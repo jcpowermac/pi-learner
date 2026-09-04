@@ -26,6 +26,7 @@ export class CircuitBreaker {
     } else {
       this.consecutiveFailures.delete(this.lastCallSignature);
     }
+    this.lastCallSignature = null;
   }
 
   shouldBlock(toolName: string, input: any): { block: boolean; reason?: string } {

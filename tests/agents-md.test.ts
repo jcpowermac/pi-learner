@@ -23,10 +23,11 @@ test("updateAgentsMd updates delimited block and enforces hard line cap with LRU
     { id: "3", tier: 2, toolName: "bash", pattern: "p3", recommendation: "Rule 3", sessionCount: 5, lastSeenTimestamp: 300 },
   ];
 
-  // Set line cap to 2 rules
-  const res = updateAgentsMd(agentsFile, rules, 2);
+  // Set total block line cap to 5 lines (3 overhead lines + 2 rules)
+  const res = updateAgentsMd(agentsFile, rules, 5);
   assert.equal(res.updated, true);
   assert.equal(res.ruleCount, 2);
+  assert.equal(res.lines, 5);
 
   const content = fs.readFileSync(agentsFile, "utf8");
   assert.match(content, /Developer Guidelines/); // Preserved human content
@@ -34,6 +35,27 @@ test("updateAgentsMd updates delimited block and enforces hard line cap with LRU
   assert.match(content, /Rule 3/); // Most recent
   assert.match(content, /Rule 2/);
   assert.doesNotMatch(content, /Rule 1/); // Evicted via LRU!
+});
+
+test("updateAgentsMd sanitizes multi-line recommendations to single line", (t) => {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "pi-learner-agents-multiline-"));
+  const agentsFile = path.join(tmpDir, "AGENTS.md");
+
+  t.after(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  const rules: LearnedRule[] = [
+    { id: "1", tier: 2, toolName: "bash", pattern: "p1", recommendation: "Multi-line\nrecommendation\r\nwith linebreaks", sessionCount: 3, lastSeenTimestamp: 100 },
+  ];
+
+  const res = updateAgentsMd(agentsFile, rules, 10);
+  assert.equal(res.updated, true);
+  assert.equal(res.ruleCount, 1);
+
+  const content = fs.readFileSync(agentsFile, "utf8");
+  assert.match(content, /- Multi-line recommendation with linebreaks/);
+  assert.doesNotMatch(content, /Multi-line\nrecommendation/);
 });
 
 test("updateAgentsMd returns updated: false if no tier 2 rules", (t) => {

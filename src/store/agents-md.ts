@@ -18,20 +18,21 @@ export function updateAgentsMd(
   // Sort by lastSeenTimestamp descending (newest first for LRU retention)
   const sorted = [...tier2Rules].sort((a, b) => b.lastSeenTimestamp - a.lastSeenTimestamp);
 
-  // Deduplicate recommendations
+  // Deduplicate recommendations and sanitize to single lines
   const uniqueRecommendations: string[] = [];
   const seen = new Set<string>();
 
   for (const rule of sorted) {
-    const text = rule.recommendation.trim();
-    if (!seen.has(text)) {
+    const text = rule.recommendation.replace(/\r?\n/g, " ").trim();
+    if (text && !seen.has(text)) {
       seen.add(text);
       uniqueRecommendations.push(text);
     }
   }
 
-  // Cap lines to maxLines
-  const capped = uniqueRecommendations.slice(0, maxLines);
+  // Cap recommendations so total block lines (including 3 marker/header lines) never exceed maxLines
+  const maxRecommendations = Math.max(1, maxLines - 3);
+  const capped = uniqueRecommendations.slice(0, maxRecommendations);
 
   const blockLines = [
     START_MARKER,
@@ -66,5 +67,5 @@ export function updateAgentsMd(
   fs.writeFileSync(tmpPath, newContent, "utf8");
   fs.renameSync(tmpPath, filePath);
 
-  return { updated: true, ruleCount: capped.length, lines: capped.length };
+  return { updated: true, ruleCount: capped.length, lines: blockLines.length };
 }

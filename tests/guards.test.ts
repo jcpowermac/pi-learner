@@ -64,3 +64,19 @@ test("CircuitBreaker success resets failure count and different args do not bloc
   cb.reset();
   assert.equal(cb.shouldBlock("bash", { command: "cmd-fail" }).block, false);
 });
+
+test("CircuitBreaker clears lastCallSignature after recording result so it does not linger", () => {
+  const cb = new CircuitBreaker(2);
+
+  cb.recordToolCall("bash", { command: "failing-cmd" });
+  cb.recordToolResult("bash", true); // failure 1
+
+  // Second tool result without a tool call does not increment failure count
+  cb.recordToolResult("bash", true);
+  assert.equal(cb.shouldBlock("bash", { command: "failing-cmd" }).block, false);
+
+  // New tool call with failure increments to 2 and blocks
+  cb.recordToolCall("bash", { command: "failing-cmd" });
+  cb.recordToolResult("bash", true); // failure 2
+  assert.equal(cb.shouldBlock("bash", { command: "failing-cmd" }).block, true);
+});
