@@ -1,0 +1,34 @@
+{
+  "name": "pi-learner",
+  "version": "0.1.0",
+  "description": "Trace-driven self-improvement extension for Pi coding agent",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "test": "node --import tsx --test tests/**/*.test.ts",
+    "prepublishOnly": "npm run build"
+  },
+  "pi": {
+    "extensions": [
+      "./dist/index.js"
+    ]
+  },
+  "keywords": [
+    "pi",
+    "opentelemetry",
+    "self-improving",
+    "agent",
+    "learning"
+  ],
+  "license": "MIT",
+  "devDependencies": {
+    "@types/node": "^20.14.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.5.0"
+  }
+}
