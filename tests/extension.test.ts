@@ -39,6 +39,13 @@ test("resolveConfig resolves default environment values", () => {
   assert.equal(cfg.circuitBreakerLimit, 2);
 });
 
+test("resolveConfig respects PI_LEARNER_DB_PATH fallback for playbooksPath", () => {
+  process.env.PI_LEARNER_DB_PATH = "/tmp/custom-playbooks.json";
+  const cfg = resolveConfig();
+  assert.equal(cfg.playbooksPath, "/tmp/custom-playbooks.json");
+  delete process.env.PI_LEARNER_DB_PATH;
+});
+
 test("extension registers hooks, handles tool sanitization, and runs /learn command", async (t) => {
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "pi-learner-ext-"));
   const tracesPath = path.join(tmpDir, "traces.jsonl");
@@ -46,6 +53,10 @@ test("extension registers hooks, handles tool sanitization, and runs /learn comm
   const playbooksPath = path.join(tmpDir, "playbooks.json");
 
   t.after(() => {
+    delete process.env.PI_LEARNER_TRACES_PATH;
+    delete process.env.PI_LEARNER_AGENTS_MD_PATH;
+    delete process.env.PI_LEARNER_PLAYBOOKS_PATH;
+    delete process.env.PI_LEARNER_DB_PATH;
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 
@@ -75,6 +86,10 @@ test("extension registers hooks, handles tool sanitization, and runs /learn comm
 test("extension blocks tool_call when circuit breaker trips", async (t) => {
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "pi-learner-ext-"));
   t.after(() => {
+    delete process.env.PI_LEARNER_TRACES_PATH;
+    delete process.env.PI_LEARNER_AGENTS_MD_PATH;
+    delete process.env.PI_LEARNER_PLAYBOOKS_PATH;
+    delete process.env.PI_LEARNER_CIRCUIT_BREAKER_LIMIT;
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 
@@ -105,6 +120,9 @@ test("extension queues and injects JIT tip via before_agent_start on matching er
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "pi-learner-ext-"));
   const playbooksPath = path.join(tmpDir, "playbooks.json");
   t.after(() => {
+    delete process.env.PI_LEARNER_TRACES_PATH;
+    delete process.env.PI_LEARNER_AGENTS_MD_PATH;
+    delete process.env.PI_LEARNER_PLAYBOOKS_PATH;
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 

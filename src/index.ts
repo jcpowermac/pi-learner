@@ -18,7 +18,7 @@ export function resolveConfig(): PiLearnerConfig {
     circuitBreakerLimit: parseInt(env.PI_LEARNER_CIRCUIT_BREAKER_LIMIT ?? "2", 10),
     tracesPath: env.PI_LEARNER_TRACES_PATH ?? path.resolve(process.cwd(), ".pi/traces.jsonl"),
     agentsMdPath: env.PI_LEARNER_AGENTS_MD_PATH ?? path.resolve(process.cwd(), ".pi/AGENTS.md"),
-    playbooksPath: env.PI_LEARNER_PLAYBOOKS_PATH ?? path.resolve(process.cwd(), ".pi/playbooks.json"),
+    playbooksPath: env.PI_LEARNER_PLAYBOOKS_PATH ?? env.PI_LEARNER_DB_PATH ?? path.resolve(process.cwd(), ".pi/playbooks.json"),
   };
 }
 
@@ -114,9 +114,13 @@ export default function (pi: any) {
   pi.registerCommand?.("learn", {
     description: "Analyze pi-otel traces and update .pi/AGENTS.md guidelines",
     handler: async (_args: string, ctx: any) => {
-      ctx?.ui?.notify?.("Analyzing traces...", "info");
-      const res = await runLearningPass();
-      ctx?.ui?.notify?.(`Learning pass complete: ${res.ruleCount} rule(s) promoted.`, "info");
+      try {
+        ctx?.ui?.notify?.("Analyzing traces...", "info");
+        const res = await runLearningPass();
+        ctx?.ui?.notify?.(`Learning pass complete: ${res.ruleCount} rule(s) promoted.`, "info");
+      } catch (err) {
+        console.warn("[pi-learner] Error in /learn command:", err);
+      }
     },
   });
 

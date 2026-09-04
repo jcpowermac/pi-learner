@@ -54,7 +54,7 @@ export class PlaybookStore {
     const normalized = errorSnippet.toLowerCase();
 
     for (const rule of this.memoryCache.values()) {
-      if (rule.toolName === toolName) {
+      if (rule.toolName === toolName && typeof rule?.pattern === "string") {
         const patternTerm = rule.pattern.replace(/.*?:/, "").toLowerCase();
         if (patternTerm && (normalized.includes(patternTerm) || patternTerm.includes(normalized))) {
           return rule.recommendation;
