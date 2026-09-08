@@ -1,4 +1,5 @@
 // src/index.ts
+import * as fs from "node:fs";
 import * as path from "node:path";
 import type { PiLearnerConfig } from "./types.js";
 import { readTraceSpans } from "./miner/trace-reader.js";
@@ -25,6 +26,13 @@ export function resolveConfig(): PiLearnerConfig {
 export default function (pi: any) {
   const config = resolveConfig();
   if (config.disabled) return;
+
+  if (!fs.existsSync(config.tracesPath)) {
+    console.warn(
+      `[pi-learner] No trace data at ${config.tracesPath}; set PI_OTEL_EXPORTER=file ` +
+        "(or PI_LEARNER_TRACES_PATH) so pi-otel writes traces."
+    );
+  }
 
   const circuitBreaker = new CircuitBreaker(config.circuitBreakerLimit);
   const playbookStore = new PlaybookStore(config.playbooksPath);
