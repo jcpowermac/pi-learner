@@ -1,8 +1,33 @@
 import * as fs from "node:fs";
+import * as path from "node:path";
 import * as readline from "node:readline";
 import type { ParsedSpan } from "../types.js";
 
+/**
+ * Resolve trace files for a configured path: the exact file if present,
+ * otherwise pi-otel's per-session files (traces-<sid8>.jsonl) in the same dir.
+ */
+export function resolveTraceFiles(filePath: string): string[] {
+  if (fs.existsSync(filePath)) return [filePath];
+  const dir = path.dirname(filePath);
+  if (!fs.existsSync(dir)) return [];
+  return fs
+    .readdirSync(dir)
+    .filter((f) => /^traces-.*\.jsonl$/.test(f))
+    .sort()
+    .map((f) => path.join(dir, f));
+}
+
 export async function readTraceSpans(filePath: string, maxBytes = 5 * 1024 * 1024): Promise<ParsedSpan[]> {
+  const files = resolveTraceFiles(filePath);
+  const spans: ParsedSpan[] = [];
+  for (const f of files) {
+    spans.push(...(await readOneFile(f, maxBytes)));
+  }
+  return spans;
+}
+
+async function readOneFile(filePath: string, maxBytes = 5 * 1024 * 1024): Promise<ParsedSpan[]> {
   if (!fs.existsSync(filePath)) {
     return [];
   }

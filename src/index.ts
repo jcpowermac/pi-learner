@@ -2,7 +2,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import type { PiLearnerConfig } from "./types.js";
-import { readTraceSpans } from "./miner/trace-reader.js";
+import { readTraceSpans, resolveTraceFiles } from "./miner/trace-reader.js";
 import { extractRecoveryPairs, classifyLearnedRules } from "./miner/classifier.js";
 import { sanitizeToolInput } from "./guards/sanitizer.js";
 import { CircuitBreaker } from "./guards/circuit-breaker.js";
@@ -27,10 +27,10 @@ export default function (pi: any) {
   const config = resolveConfig();
   if (config.disabled) return;
 
-  if (!fs.existsSync(config.tracesPath)) {
+  if (resolveTraceFiles(config.tracesPath).length === 0) {
     console.warn(
-      `[pi-learner] No trace data at ${config.tracesPath}; set PI_OTEL_EXPORTER=file ` +
-        "(or PI_LEARNER_TRACES_PATH) so pi-otel writes traces."
+      `[pi-learner] No trace data at ${config.tracesPath} (or per-session traces-*.jsonl beside it); ` +
+        "set PI_OTEL_EXPORTER=file (or PI_LEARNER_TRACES_PATH) so pi-otel writes traces."
     );
   }
 
