@@ -62,7 +62,9 @@ export function extractRecoveryPairs(spans: ParsedSpan[]): FailureRecoveryPair[]
               const cmdVerb = cmdTokens.slice(0, 2).join(" ");
               errorSig = cmdVerb ? `command_fail:${cmdVerb}` : "command_fail";
             } else if (typeof failedInput?.path === "string") {
-              errorSig = `path_fail:${failedInput.path}`;
+              // ponytail: bare "path_fail" — per-path signatures never repeat
+              // across sessions, so they could never reach the rule-of-3 gate.
+              errorSig = "path_fail";
             } else {
               errorSig = `${toolName}_error`;
             }

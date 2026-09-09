@@ -41,4 +41,6 @@ export interface PiLearnerConfig {
   tracesPath: string;
   agentsMdPath: string;
   playbooksPath: string;
+  /** Base URL of an otel-gui collector (e.g. http://localhost:4318); undefined = local files only. */
+  collectorUrl?: string;
 }

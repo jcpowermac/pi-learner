@@ -42,7 +42,8 @@ Configure via environment variables:
 | `PI_LEARNER_MAX_AGENTS_MD_LINES` | `30` | Maximum lines for `.pi/AGENTS.md` block (~300 tokens) |
 | `PI_LEARNER_RULE_OF_N` | `3` | Minimum sessions required before promoting a pattern |
 | `PI_LEARNER_CIRCUIT_BREAKER_LIMIT` | `2` | Consecutive identical failures before tripping guard |
-| `PI_LEARNER_TRACES_PATH` | `.pi/traces.jsonl` | Path to `pi-otel` trace log |
+| `PI_LEARNER_TRACES_PATH` | `.pi/traces.jsonl` | Path to `pi-otel` trace log (falls back to per-session `traces-*.jsonl` files beside it) |
+| `PI_LEARNER_COLLECTOR_URL` | *(unset)* | Base URL of an otel-gui collector (e.g. `http://localhost:4318`); when set, `/learn` also mines spans from `GET /api/traces` and dedupes against local traces |
 | `PI_LEARNER_AGENTS_MD_PATH` | `.pi/AGENTS.md` | Path to repository guidelines file |
 | `PI_LEARNER_PLAYBOOKS_PATH` | `.pi/playbooks.json` | Path to Tier 3 playbook database (alias: `PI_LEARNER_DB_PATH`) |
 

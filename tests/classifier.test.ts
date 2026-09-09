@@ -222,3 +222,23 @@ test("classifyLearnedRules classifies Tier 3 when no command is present", () => 
   assert.equal(rules[0].tier, 3);
   assert.match(rules[0].recommendation, /safe/);
 });
+
+test("path failures cluster under a session-independent signature", () => {
+  const spans = [
+    {
+      traceId: "t1",
+      spanId: "s1",
+      name: "tool:read",
+      attributes: { "tool.name": "read", "tool.is_error": true, "tool.input.json": JSON.stringify({ path: "/project-a/src/one.ts" }) },
+    },
+    {
+      traceId: "t1",
+      spanId: "s2",
+      name: "tool:read",
+      attributes: { "tool.name": "read", "tool.is_error": false, "tool.input.json": JSON.stringify({ path: "/project-a/src/two.ts" }) },
+    },
+  ] as any;
+  const pairs = extractRecoveryPairs(spans);
+  assert.equal(pairs.length, 1);
+  assert.equal(pairs[0].errorSignature, "path_fail"); // same signature in every session => can reach rule-of-3
+});

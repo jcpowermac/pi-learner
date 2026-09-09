@@ -3,6 +3,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import type { PiLearnerConfig } from "./types.js";
 import { readTraceSpans, resolveTraceFiles } from "./miner/trace-reader.js";
+import { fetchCollectorSpans, mergeSpans } from "./miner/collector.js";
 import { extractRecoveryPairs, classifyLearnedRules } from "./miner/classifier.js";
 import { sanitizeToolInput } from "./guards/sanitizer.js";
 import { CircuitBreaker } from "./guards/circuit-breaker.js";
@@ -20,6 +21,7 @@ export function resolveConfig(): PiLearnerConfig {
     tracesPath: env.PI_LEARNER_TRACES_PATH ?? path.resolve(process.cwd(), ".pi/traces.jsonl"),
     agentsMdPath: env.PI_LEARNER_AGENTS_MD_PATH ?? path.resolve(process.cwd(), ".pi/AGENTS.md"),
     playbooksPath: env.PI_LEARNER_PLAYBOOKS_PATH ?? env.PI_LEARNER_DB_PATH ?? path.resolve(process.cwd(), ".pi/playbooks.json"),
+    collectorUrl: env.PI_LEARNER_COLLECTOR_URL || undefined,
   };
 }
 
@@ -40,7 +42,19 @@ export default function (pi: any) {
 
   async function runLearningPass(): Promise<{ ruleCount: number }> {
     try {
-      const spans = await readTraceSpans(config.tracesPath);
+      const localSpans = await readTraceSpans(config.tracesPath);
+      let spans = localSpans;
+      if (config.collectorUrl) {
+        try {
+          const collectorSpans = await fetchCollectorSpans(config.collectorUrl);
+          spans = mergeSpans([localSpans, collectorSpans]);
+        } catch (err) {
+          console.warn(
+            `[pi-learner] Collector fetch failed (${config.collectorUrl}); using local traces only: ` +
+              (err instanceof Error ? err.message : err)
+          );
+        }
+      }
       if (spans.length === 0) return { ruleCount: 0 };
 
       const pairs = extractRecoveryPairs(spans);
