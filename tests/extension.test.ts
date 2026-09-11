@@ -6,6 +6,23 @@ import * as os from "node:os";
 import * as path from "node:path";
 import extensionFactory, { resolveConfig } from "../src/index.js";
 
+// Point PI_CODING_AGENT_DIR at a temp dir with an optional pi-learner.json.
+// Pass cfg as null to test the missing-file path.
+function withConfigDir(t: any, cfg: Record<string, unknown> | null): string {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "pi-learner-cfg-"));
+  if (cfg !== null) {
+    fs.writeFileSync(path.join(dir, "pi-learner.json"), JSON.stringify(cfg), "utf8");
+  }
+  const prev = process.env.PI_CODING_AGENT_DIR;
+  process.env.PI_CODING_AGENT_DIR = dir;
+  t.after(() => {
+    if (prev === undefined) delete process.env.PI_CODING_AGENT_DIR;
+    else process.env.PI_CODING_AGENT_DIR = prev;
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+  return dir;
+}
+
 class MockExtensionAPI {
   handlers = new Map<string, Function[]>();
   commands = new Map<string, Function>();
@@ -30,7 +47,8 @@ class MockExtensionAPI {
   }
 }
 
-test("resolveConfig resolves default environment values", () => {
+test("resolveConfig resolves defaults when no config file exists", (t) => {
+  withConfigDir(t, null);
   const cfg = resolveConfig();
   assert.equal(cfg.disabled, false);
   assert.equal(cfg.autoLearn, true);
@@ -39,11 +57,30 @@ test("resolveConfig resolves default environment values", () => {
   assert.equal(cfg.circuitBreakerLimit, 2);
 });
 
-test("resolveConfig respects PI_LEARNER_DB_PATH fallback for playbooksPath", () => {
-  process.env.PI_LEARNER_DB_PATH = "/tmp/custom-playbooks.json";
+test("resolveConfig reads the learner section from the config file", (t) => {
+  withConfigDir(t, {
+    learner: {
+      disabled: true,
+      autoLearn: false,
+      maxAgentsMdLines: 50,
+      ruleOfN: 5,
+      circuitBreakerLimit: 4,
+      tracesPath: "/tmp/custom-traces.jsonl",
+      agentsMdPath: "/tmp/custom-AGENTS.md",
+      playbooksPath: "/tmp/custom-playbooks.json",
+      collectorUrl: "http://localhost:4318",
+    },
+  });
   const cfg = resolveConfig();
+  assert.equal(cfg.disabled, true);
+  assert.equal(cfg.autoLearn, false);
+  assert.equal(cfg.maxAgentsMdLines, 50);
+  assert.equal(cfg.ruleOfN, 5);
+  assert.equal(cfg.circuitBreakerLimit, 4);
+  assert.equal(cfg.tracesPath, "/tmp/custom-traces.jsonl");
+  assert.equal(cfg.agentsMdPath, "/tmp/custom-AGENTS.md");
   assert.equal(cfg.playbooksPath, "/tmp/custom-playbooks.json");
-  delete process.env.PI_LEARNER_DB_PATH;
+  assert.equal(cfg.collectorUrl, "http://localhost:4318");
 });
 
 test("extension registers hooks, handles tool sanitization, and runs /learn command", async (t) => {
@@ -52,17 +89,13 @@ test("extension registers hooks, handles tool sanitization, and runs /learn comm
   const agentsMdPath = path.join(tmpDir, "AGENTS.md");
   const playbooksPath = path.join(tmpDir, "playbooks.json");
 
-  t.after(() => {
-    delete process.env.PI_LEARNER_TRACES_PATH;
-    delete process.env.PI_LEARNER_AGENTS_MD_PATH;
-    delete process.env.PI_LEARNER_PLAYBOOKS_PATH;
-    delete process.env.PI_LEARNER_DB_PATH;
-    fs.rmSync(tmpDir, { recursive: true, force: true });
+  withConfigDir(t, {
+    learner: {
+      tracesPath,
+      agentsMdPath,
+      playbooksPath,
+    },
   });
-
-  process.env.PI_LEARNER_TRACES_PATH = tracesPath;
-  process.env.PI_LEARNER_AGENTS_MD_PATH = agentsMdPath;
-  process.env.PI_LEARNER_PLAYBOOKS_PATH = playbooksPath;
 
   const pi = new MockExtensionAPI();
   extensionFactory(pi as any);
@@ -85,18 +118,16 @@ test("extension registers hooks, handles tool sanitization, and runs /learn comm
 
 test("extension blocks tool_call when circuit breaker trips", async (t) => {
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "pi-learner-ext-"));
-  t.after(() => {
-    delete process.env.PI_LEARNER_TRACES_PATH;
-    delete process.env.PI_LEARNER_AGENTS_MD_PATH;
-    delete process.env.PI_LEARNER_PLAYBOOKS_PATH;
-    delete process.env.PI_LEARNER_CIRCUIT_BREAKER_LIMIT;
-    fs.rmSync(tmpDir, { recursive: true, force: true });
-  });
+  t.after(() => fs.rmSync(tmpDir, { recursive: true, force: true }));
 
-  process.env.PI_LEARNER_TRACES_PATH = path.join(tmpDir, "traces.jsonl");
-  process.env.PI_LEARNER_AGENTS_MD_PATH = path.join(tmpDir, "AGENTS.md");
-  process.env.PI_LEARNER_PLAYBOOKS_PATH = path.join(tmpDir, "playbooks.json");
-  process.env.PI_LEARNER_CIRCUIT_BREAKER_LIMIT = "2";
+  withConfigDir(t, {
+    learner: {
+      tracesPath: path.join(tmpDir, "traces.jsonl"),
+      agentsMdPath: path.join(tmpDir, "AGENTS.md"),
+      playbooksPath: path.join(tmpDir, "playbooks.json"),
+      circuitBreakerLimit: 2,
+    },
+  });
 
   const pi = new MockExtensionAPI();
   extensionFactory(pi as any);
@@ -119,12 +150,7 @@ test("extension blocks tool_call when circuit breaker trips", async (t) => {
 test("extension queues and injects JIT tip via before_agent_start on matching error", async (t) => {
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "pi-learner-ext-"));
   const playbooksPath = path.join(tmpDir, "playbooks.json");
-  t.after(() => {
-    delete process.env.PI_LEARNER_TRACES_PATH;
-    delete process.env.PI_LEARNER_AGENTS_MD_PATH;
-    delete process.env.PI_LEARNER_PLAYBOOKS_PATH;
-    fs.rmSync(tmpDir, { recursive: true, force: true });
-  });
+  t.after(() => fs.rmSync(tmpDir, { recursive: true, force: true }));
 
   // Pre-seed a playbook rule
   fs.writeFileSync(
@@ -143,9 +169,13 @@ test("extension queues and injects JIT tip via before_agent_start on matching er
     "utf8"
   );
 
-  process.env.PI_LEARNER_TRACES_PATH = path.join(tmpDir, "traces.jsonl");
-  process.env.PI_LEARNER_AGENTS_MD_PATH = path.join(tmpDir, "AGENTS.md");
-  process.env.PI_LEARNER_PLAYBOOKS_PATH = playbooksPath;
+  withConfigDir(t, {
+    learner: {
+      tracesPath: path.join(tmpDir, "traces.jsonl"),
+      agentsMdPath: path.join(tmpDir, "AGENTS.md"),
+      playbooksPath,
+    },
+  });
 
   const pi = new MockExtensionAPI();
   extensionFactory(pi as any);
@@ -167,12 +197,11 @@ test("extension queues and injects JIT tip via before_agent_start on matching er
   assert.equal(secondResult, undefined);
 });
 
-test("extension respects PI_LEARNER_DISABLED=true", () => {
-  process.env.PI_LEARNER_DISABLED = "true";
+test("extension respects learner.disabled=true", (t) => {
+  withConfigDir(t, { learner: { disabled: true } });
   const pi = new MockExtensionAPI();
   extensionFactory(pi as any);
 
-  delete process.env.PI_LEARNER_DISABLED;
   assert.equal(pi.handlers.size, 0);
   assert.equal(pi.commands.size, 0);
 });

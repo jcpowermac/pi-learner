@@ -2,6 +2,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import type { PiLearnerConfig } from "./types.js";
+import { configFilePath, readLearnerConfig } from "./config.js";
 import { readTraceSpans, resolveTraceFiles } from "./miner/trace-reader.js";
 import { fetchCollectorSpans, mergeSpans } from "./miner/collector.js";
 import { extractRecoveryPairs, classifyLearnedRules } from "./miner/classifier.js";
@@ -11,17 +12,19 @@ import { updateAgentsMd } from "./store/agents-md.js";
 import { PlaybookStore } from "./store/db.js";
 
 export function resolveConfig(): PiLearnerConfig {
-  const env = process.env;
+  const file = readLearnerConfig() ?? {};
+  // Relative paths resolve against the working directory.
+  const resolvePath = (p?: string) => (p ? path.resolve(process.cwd(), p) : undefined);
   return {
-    disabled: env.PI_LEARNER_DISABLED === "true" || env.PI_LEARNER_DISABLED === "1",
-    autoLearn: env.PI_LEARNER_AUTO !== "false" && env.PI_LEARNER_AUTO !== "0",
-    maxAgentsMdLines: parseInt(env.PI_LEARNER_MAX_AGENTS_MD_LINES ?? "30", 10),
-    ruleOfN: parseInt(env.PI_LEARNER_RULE_OF_N ?? "3", 10),
-    circuitBreakerLimit: parseInt(env.PI_LEARNER_CIRCUIT_BREAKER_LIMIT ?? "2", 10),
-    tracesPath: env.PI_LEARNER_TRACES_PATH ?? path.resolve(process.cwd(), ".pi/traces.jsonl"),
-    agentsMdPath: env.PI_LEARNER_AGENTS_MD_PATH ?? path.resolve(process.cwd(), ".pi/AGENTS.md"),
-    playbooksPath: env.PI_LEARNER_PLAYBOOKS_PATH ?? env.PI_LEARNER_DB_PATH ?? path.resolve(process.cwd(), ".pi/playbooks.json"),
-    collectorUrl: env.PI_LEARNER_COLLECTOR_URL || undefined,
+    disabled: file.disabled ?? false,
+    autoLearn: file.autoLearn ?? true,
+    maxAgentsMdLines: file.maxAgentsMdLines ?? 30,
+    ruleOfN: file.ruleOfN ?? 3,
+    circuitBreakerLimit: file.circuitBreakerLimit ?? 2,
+    tracesPath: resolvePath(file.tracesPath) ?? path.resolve(process.cwd(), ".pi/traces.jsonl"),
+    agentsMdPath: resolvePath(file.agentsMdPath) ?? path.resolve(process.cwd(), ".pi/AGENTS.md"),
+    playbooksPath: resolvePath(file.playbooksPath) ?? path.resolve(process.cwd(), ".pi/playbooks.json"),
+    collectorUrl: file.collectorUrl || undefined,
   };
 }
 
@@ -32,7 +35,7 @@ export default function (pi: any) {
   if (resolveTraceFiles(config.tracesPath).length === 0) {
     console.warn(
       `[pi-learner] No trace data at ${config.tracesPath} (or per-session traces-*.jsonl beside it); ` +
-        "set PI_OTEL_EXPORTER=file (or PI_LEARNER_TRACES_PATH) so pi-otel writes traces."
+        `set otel.exporters=[\"file\"] (or learner.tracesPath) in ${configFilePath()} so pi-otel writes traces.`
     );
   }
 
